@@ -1,0 +1,9 @@
+{
+  "actorSpecification": "1.0",
+  "name": "marketplace-scraper",
+  "title": "Facebook Marketplace Scraper (Query + Location)",
+  "description": "Search Facebook Marketplace listings by query and location and outputs results to the default dataset.",
+  "version": "0.1",
+  "dockerfile": "Dockerfile",
+  "input": "./INPUT_SCHEMA.json"
+}

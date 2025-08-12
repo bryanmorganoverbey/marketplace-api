@@ -141,21 +141,35 @@ def parsePageResults(rawPageResults):
 
             # If object is a listing
             if (listing["node"]["__typename"] == "MarketplaceFeedListingStoryObject"):
-                listingID = listing["node"]["listing"]["id"]
-                listingName = listing["node"]["listing"]["marketplace_listing_title"]
-                listingCurrentPrice = listing["node"]["listing"]["listing_price"]["formatted_amount"]
+                node = listing.get("node", {})
+                listing_node = node.get("listing") or {}
 
-                # If listing has a previous price
-                if (listing["node"]["listing"]["strikethrough_price"]):
-                    listingPreviousPrice = listing["node"]["listing"]["strikethrough_price"]["formatted_amount"]
-                else:
-                    listingPreviousPrice = ""
+                listingID = listing_node.get("id", "")
+                listingName = listing_node.get("marketplace_listing_title", "")
 
-                listingSaleIsPending = listing["node"]["listing"]["is_pending"]
-                listingPrimaryPhotoURL = listing["node"]["listing"]["primary_listing_photo"]["image"]["uri"]
-                sellerName = listing["node"]["listing"]["marketplace_listing_seller"]["name"]
-                sellerLocation = listing["node"]["listing"]["location"]["reverse_geocode"]["city_page"]["display_name"]
-                sellerType = listing["node"]["listing"]["marketplace_listing_seller"]["__typename"]
+                listing_price = listing_node.get("listing_price") or {}
+                listingCurrentPrice = listing_price.get("formatted_amount", "")
+
+                strikethrough_price = listing_node.get(
+                    "strikethrough_price") or {}
+                listingPreviousPrice = strikethrough_price.get(
+                    "formatted_amount", "")
+
+                listingSaleIsPending = listing_node.get("is_pending", False)
+
+                primary_listing_photo = listing_node.get(
+                    "primary_listing_photo") or {}
+                image = primary_listing_photo.get("image") or {}
+                listingPrimaryPhotoURL = image.get("uri", "")
+
+                seller = listing_node.get("marketplace_listing_seller") or {}
+                sellerName = seller.get("name", "")
+                sellerType = seller.get("__typename", "")
+
+                location = listing_node.get("location") or {}
+                reverse_geocode = location.get("reverse_geocode") or {}
+                city_page = reverse_geocode.get("city_page") or {}
+                sellerLocation = city_page.get("display_name", "")
 
                 # Add the listing to its corresponding page
                 listingPages[pageIndex]["listings"].append({
@@ -173,3 +187,15 @@ def parsePageResults(rawPageResults):
         pageIndex += 1
 
     return listingPages
+
+
+def searchListings(locationQuery: str, listingQuery: str, numPageResults: int = 1):
+    status, error, locationData = getLocations(locationQuery)
+    if status != "Success" or not locationData.get("locations"):
+        return status, error, {}
+
+    # Choose the first location match
+    latitude = locationData["locations"][0]["latitude"]
+    longitude = locationData["locations"][0]["longitude"]
+
+    return getListings(latitude, longitude, listingQuery, numPageResults)

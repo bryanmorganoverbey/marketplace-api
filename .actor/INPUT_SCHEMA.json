@@ -1,0 +1,29 @@
+{
+  "title": "Marketplace Scraper Input",
+  "description": "Specify location, search query and number of pages to fetch.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "locationQuery": {
+      "title": "Location",
+      "type": "string",
+      "description": "City or area to search (e.g., Miami, FL)",
+      "default": "Miami"
+    },
+    "listingQuery": {
+      "title": "Listing query",
+      "type": "string",
+      "description": "Search term for Facebook Marketplace (e.g., bikes)",
+      "default": "bikes"
+    },
+    "numPageResults": {
+      "title": "Number of pages",
+      "type": "integer",
+      "description": "How many result pages to fetch (each page ~24 listings).",
+      "default": 1,
+      "minimum": 1,
+      "maximum": 10
+    }
+  },
+  "required": ["locationQuery", "listingQuery"]
+}
