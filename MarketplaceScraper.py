@@ -1,12 +1,34 @@
 import requests
 import json
 import copy
+import time
+import random
+from typing import Tuple, Dict, Any
 
 GRAPHQL_URL = "https://www.facebook.com/api/graphql/"
-GRAPHQL_HEADERS = {
-    "sec-fetch-site": "same-origin",
-    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.74 Safari/537.36"
-}
+
+# Rotate between different user agents to avoid detection
+USER_AGENTS = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/121.0"
+]
+
+
+def get_random_headers():
+    """Generate randomized headers to avoid detection"""
+    return {
+        "sec-fetch-site": "same-origin",
+        "user-agent": random.choice(USER_AGENTS),
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "accept-language": "en-US,en;q=0.5",
+        "accept-encoding": "gzip, deflate, br",
+        "dnt": "1",
+        "connection": "keep-alive",
+        "upgrade-insecure-requests": "1",
+    }
 
 
 def getLocations(locationQuery):
@@ -61,12 +83,16 @@ def getListings(locationLatitude, locationLongitude, listingQuery, numPageResult
         rawPageResults.append(facebookResponseJSON)
 
         # Retrieve subsequent page results if numPageResults > 1
-        for _ in range(1, numPageResults):
+        for page_num in range(1, numPageResults):
             pageInfo = facebookResponseJSON["data"]["marketplace_search"]["feed_units"]["page_info"]
 
             # If a next page of results exists
             if (pageInfo["has_next_page"]):
                 cursor = facebookResponseJSON["data"]["marketplace_search"]["feed_units"]["page_info"]["end_cursor"]
+
+                # Add extra delay between pages to be more respectful
+                print(f"Fetching page {page_num + 1}/{numPageResults}...")
+                time.sleep(random.uniform(2, 4))
 
                 # Make a copy of the original request payload
                 requestPayloadCopy = copy.copy(requestPayload)
@@ -86,7 +112,12 @@ def getListings(locationLatitude, locationLongitude, listingQuery, numPageResult
                     facebookResponseJSON = json.loads(facebookResponse.text)
                     rawPageResults.append(facebookResponseJSON)
                 else:
+                    print(
+                        f"Failed to fetch page {page_num + 1}: {error.get('message', 'Unknown error')}")
                     return (status, error, data)
+            else:
+                print(f"No more pages available after page {page_num}")
+                break
     else:
         return (status, error, data)
 
@@ -95,36 +126,97 @@ def getListings(locationLatitude, locationLongitude, listingQuery, numPageResult
     return (status, error, data)
 
 
-# Helper function
-def getFacebookResponse(requestPayload):
+# Helper function with retry logic and rate limiting
+def getFacebookResponse(requestPayload, max_retries=3):
+    """
+    Make a request to Facebook GraphQL API with retry logic and rate limiting
+    """
     status = "Success"
     error = {}
 
-    # Try making post request to Facebook, excpet return
-    try:
-        facebookResponse = requests.post(
-            GRAPHQL_URL, headers=GRAPHQL_HEADERS, data=requestPayload)
-    except requests.exceptions.RequestException as requestError:
-        status = "Failure"
-        error["source"] = "Request"
-        error["message"] = str(requestError)
-        facebookResponse = None
-        return (status, error, facebookResponse)
+    for attempt in range(max_retries):
+        # Add delay between requests to avoid rate limiting
+        if attempt > 0:
+            # Exponential backoff with jitter
+            backoff_delay = (2 ** attempt) + random.uniform(1, 3)
+            print(
+                f"Rate limit detected, waiting {backoff_delay:.1f}s before retry {attempt + 1}/{max_retries}")
+            time.sleep(backoff_delay)
+        else:
+            # Small random delay even on first request
+            time.sleep(random.uniform(0.5, 2.0))
 
-    if (facebookResponse.status_code == 200):
-        facebookResponseJSON = json.loads(facebookResponse.text)
+        try:
+            # Use randomized headers for each request
+            headers = get_random_headers()
+            facebookResponse = requests.post(
+                GRAPHQL_URL,
+                headers=headers,
+                data=requestPayload,
+                timeout=30  # Add timeout to prevent hanging
+            )
+        except requests.exceptions.RequestException as requestError:
+            if attempt == max_retries - 1:  # Last attempt
+                status = "Failure"
+                error["source"] = "Request"
+                error["message"] = str(requestError)
+                facebookResponse = None
+                return (status, error, facebookResponse)
+            continue
 
-        if (facebookResponseJSON.get("errors")):
+        # Check response status
+        if facebookResponse.status_code == 200:
+            try:
+                facebookResponseJSON = json.loads(facebookResponse.text)
+
+                if facebookResponseJSON.get("errors"):
+                    error_msg = facebookResponseJSON["errors"][0]["message"]
+
+                    # Check for rate limiting errors
+                    if "rate limit" in error_msg.lower() or "too many requests" in error_msg.lower():
+                        if attempt < max_retries - 1:
+                            print(f"Rate limit error: {error_msg}")
+                            continue  # Retry with exponential backoff
+
+                    status = "Failure"
+                    error["source"] = "Facebook"
+                    error["message"] = error_msg
+                    return (status, error, facebookResponse)
+
+                # Success - return immediately
+                return (status, error, facebookResponse)
+
+            except json.JSONDecodeError:
+                if attempt < max_retries - 1:
+                    print("Invalid JSON response, retrying...")
+                    continue
+                status = "Failure"
+                error["source"] = "Facebook"
+                error["message"] = "Invalid JSON response"
+                return (status, error, facebookResponse)
+
+        elif facebookResponse.status_code == 429:  # Too Many Requests
+            if attempt < max_retries - 1:
+                print(f"HTTP 429 - Rate limited, retrying...")
+                continue
+
+        elif facebookResponse.status_code in [403, 401]:  # Access denied
             status = "Failure"
             error["source"] = "Facebook"
-            error["message"] = facebookResponseJSON["errors"][0]["message"]
-    else:
-        status = "Failure"
-        error["source"] = "Facebook"
-        error["message"] = "Status code {}".format(
-            facebookResponse.status_code)
+            error["message"] = f"Access denied (HTTP {facebookResponse.status_code}). May need updated headers or cookies."
+            return (status, error, facebookResponse)
 
-    return (status, error, facebookResponse)
+        else:
+            if attempt < max_retries - 1:
+                print(f"HTTP {facebookResponse.status_code}, retrying...")
+                continue
+
+    # If we get here, all retries failed
+    status = "Failure"
+    error["source"] = "Facebook"
+    error["message"] = f"All {max_retries} attempts failed. Last status: HTTP {facebookResponse.status_code if 'facebookResponse' in locals() else 'Unknown'}"
+
+    return (status, error, facebookResponse if 'facebookResponse' in locals() else None)
 
 
 # Helper function

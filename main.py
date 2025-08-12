@@ -24,15 +24,28 @@ async def run_actor() -> None:
             })
             return
 
+        await Actor.set_status_message(f"Starting search for '{listing_query}' in '{location_query}'...")
+
         status, error, data = searchListings(
             location_query, listing_query, num_page_results)
 
         if status != "Success":
-            await Actor.set_status_message(f"Error: {error.get('message', 'Unknown error')}")
+            error_msg = error.get('message', 'Unknown error')
+
+            # Provide specific guidance for rate limiting
+            if 'rate limit' in error_msg.lower() or 'too many requests' in error_msg.lower():
+                await Actor.set_status_message("Rate limited by Facebook. Try reducing pages or waiting before retrying.")
+            elif 'access denied' in error_msg.lower():
+                await Actor.set_status_message("Access denied by Facebook. Headers may need updating.")
+            else:
+                await Actor.set_status_message(f"Error: {error_msg}")
+
             # Still push the error for visibility
             await Actor.push_data({
                 "status": status,
                 "error": error,
+                "locationQuery": location_query,
+                "listingQuery": listing_query,
             })
             return
 
