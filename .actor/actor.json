@@ -1,5 +1,5 @@
 {
-  "actorSpecification": "1.0",
+  "actorSpecification": "1",
   "name": "marketplace-scraper",
   "title": "Facebook Marketplace Scraper (Query + Location)",
   "description": "Search Facebook Marketplace listings by query and location and outputs results to the default dataset.",
