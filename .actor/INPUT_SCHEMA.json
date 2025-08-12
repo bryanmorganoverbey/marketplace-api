@@ -1,31 +1,36 @@
 {
-  "title": "Marketplace Scraper Input",
-  "description": "Specify location, search query and number of pages to fetch.",
+  "title": "Facebook Marketplace Scraper Input",
+  "description": "Configure the location and search parameters for scraping Facebook Marketplace listings. The scraper will find listings based on your search criteria and extract detailed information including prices, seller details, and images.",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
     "locationQuery": {
       "title": "Location",
       "type": "string",
-      "description": "City or area to search (e.g., Miami, FL)",
-      "default": "Miami",
-      "editor": "textfield"
+      "description": "City, state, or area to search within Facebook Marketplace. Examples: 'Miami, FL', 'New York', 'Los Angeles, CA'",
+      "editor": "textfield",
+      "prefill": "Miami, FL",
+      "minLength": 2,
+      "maxLength": 100
     },
     "listingQuery": {
-      "title": "Listing query",
+      "title": "Search Query",
       "type": "string",
-      "description": "Search term for Facebook Marketplace (e.g., bikes)",
-      "default": "bikes",
-      "editor": "textfield"
+      "description": "What you're looking for on Facebook Marketplace. Examples: 'mountain bike', 'iPhone', 'furniture', 'car'",
+      "editor": "textfield",
+      "prefill": "bikes",
+      "minLength": 1,
+      "maxLength": 200
     },
     "numPageResults": {
-      "title": "Number of pages",
+      "title": "Number of Pages",
       "type": "integer",
-      "description": "How many result pages to fetch (each page ~24 listings).",
+      "description": "Number of result pages to scrape. Each page contains approximately 24 listings. Higher values will take longer but provide more results.",
+      "editor": "number",
       "default": 1,
       "minimum": 1,
       "maximum": 10,
-      "editor": "number"
+      "unit": "pages"
     }
   },
   "required": ["locationQuery", "listingQuery"]
